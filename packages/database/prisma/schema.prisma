@@ -1,73 +1,109 @@
 generator client {
-    provider = "prisma-client-js"
-    output   = "../src/generated"
+  provider = "prisma-client-js"
+  output   = "../src/generated"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-    id        String   @id @default(cuid())
-    email     String   @unique
-    name      String
-    avatar    String?
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Auth
+  passwordHash String
+  sessions     Session[]
 
-    // Relations
-    sessions    Session[]
-    ownedRooms  Room[]       @relation("RoomOwner")
-    roomMembers RoomMember[]
+  // Personal boards (primary use case)
+  boards Board[]
 
-    @@map("users")
+  // Shared boards (secondary use case)
+  sharedBoards   BoardShare[]
+  
+  @@map("users")
 }
 
 model Session {
-    id        String   @id @default(cuid())
-    userId    String
-    expiresAt DateTime
-    createdAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-    // Relations
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@map("sessions")
+  @@map("sessions")
 }
 
-model Room {
-    id        String   @id @default(cuid())
-    name      String
-    ownerId   String
-    isPublic  Boolean  @default(false)
-    snapshot  Json? // Store tldraw document snapshots
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+// Core entity: Personal board (offline-first)
+model Board {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  
+  // tldraw document state
+  snapshot    Json?    // Latest document snapshot
+  
+  // Board settings
+  isTemplate  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-    // Relations
-    owner   User         @relation("RoomOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-    members RoomMember[]
-
-    @@map("rooms")
+  // Relations
+  owner  User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  shares BoardShare[]  // Optional sharing
+  
+  @@map("boards")
 }
 
-model RoomMember {
-    roomId   String
-    userId   String
-    role     RoomRole @default(VIEWER)
-    joinedAt DateTime @default(now())
-
-    // Relations
-    room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-    @@id([roomId, userId])
-    @@map("room_members")
+// Optional: When user wants to share a board
+model BoardShare {
+  id      String    @id @default(cuid())
+  boardId String
+  userId  String
+  role    ShareRole @default(VIEWER)
+  
+  // Share settings
+  canEdit   Boolean @default(false)
+  canShare  Boolean @default(false)
+  expiresAt DateTime?
+  
+  createdAt DateTime @default(now())
+  
+  // Relations
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([boardId, userId])
+  @@map("board_shares")
 }
 
-enum RoomRole {
-    OWNER
-    EDITOR
-    VIEWER
+// Optional: For real-time collaboration sessions
+model CollabSession {
+  id        String   @id @default(cuid())
+  boardId   String
+  isActive  Boolean  @default(true)
+  
+  // WebSocket room management
+  connectedUsers Json? // Store active user IDs and cursors
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Not a foreign key - boards can exist without collab sessions
+  
+  @@map("collab_sessions")
+}
+
+enum ShareRole {
+  VIEWER
+  EDITOR
+  ADMIN
 }
