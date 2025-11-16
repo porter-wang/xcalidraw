@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: excalidraw-backend
+    environment:
+      - DATABASE_URL=sqlite:///app/data/database.sqlite
+      - JWT_SECRET=${JWT_SECRET}
+      - BOARDS_DIR=/app/data/boards
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: excalidraw-frontend
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
